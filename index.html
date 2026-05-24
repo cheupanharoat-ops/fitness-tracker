@@ -104,6 +104,26 @@
   }
   .input-section.visible { display: block; }
 
+  .detection-display {
+    text-align: center; padding: 24px 16px;
+    background: var(--teal-50); border-radius: var(--radius);
+    border: 2px solid var(--teal-400); margin-bottom: 12px;
+  }
+  .detection-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
+  .detection-number { font-size: 48px; font-weight: 600; font-family: 'DM Mono', monospace; color: var(--teal-600); margin: 8px 0; }
+  .detection-unit { font-size: 14px; color: var(--muted); }
+  .detection-timer { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  .btn-control {
+    width: 100%; padding: 13px; color: white; border: none; border-radius: var(--radius-sm);
+    font-size: 15px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer;
+    margin-top: 8px; -webkit-appearance: none; transition: all 0.15s;
+  }
+  .btn-start { background: var(--teal-400); }
+  .btn-start:active { background: var(--teal-600); }
+  .btn-stop { background: var(--coral-600); }
+  .btn-stop:active { background: var(--coral-800); }
+
   .log-btn {
     width: 100%; padding: 13px; background: var(--teal-400); color: white;
     border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600;
@@ -139,11 +159,10 @@
 
   .hidden { display: none; }
 
-  #page-setup, #page-track { }
-
-  .nav-hint {
-    text-align: center; font-size: 13px; color: var(--muted);
-    padding: 16px; margin-top: -4px;
+  .permission-warning {
+    background: var(--amber-50); border: 1px solid var(--amber-100);
+    border-radius: var(--radius-sm); padding: 12px; margin-bottom: 12px;
+    font-size: 13px; color: var(--amber-800);
   }
 </style>
 </head>
@@ -196,26 +215,29 @@
 <div id="page-track" class="hidden">
   <header>
     <h1 id="greeting">Hey there! 👋</h1>
-    <p>Tap an activity to log it</p>
+    <p id="header-sub">Tap an activity to log it</p>
   </header>
 
   <div class="section">
     <p class="section-title">Log activity</p>
+    <div id="permission-warning" class="permission-warning hidden">
+      ⚠️ Motion sensors not available. Please enable permissions in your browser settings.
+    </div>
     <div class="activity-grid">
       <div class="activity-card" id="card-steps" onclick="selectActivity('steps')">
         <div class="act-icon">👟</div>
         <div class="act-name">Steps</div>
-        <div class="act-sub">How many steps?</div>
+        <div class="act-sub">Detect motion</div>
       </div>
       <div class="activity-card" id="card-running" onclick="selectActivity('running')">
         <div class="act-icon">🏃</div>
         <div class="act-name">Running</div>
-        <div class="act-sub">How many minutes?</div>
+        <div class="act-sub">Speed + time</div>
       </div>
       <div class="activity-card" id="card-jumping" onclick="selectActivity('jumping')">
         <div class="act-icon">🤸</div>
         <div class="act-name">Jumping</div>
-        <div class="act-sub">How many jumps?</div>
+        <div class="act-sub">Detect motion</div>
       </div>
       <div class="activity-card" style="background: var(--gray-50); cursor:default; opacity:0.5;">
         <div class="act-icon">➕</div>
@@ -225,9 +247,14 @@
     </div>
 
     <div class="input-section" id="activity-input">
-      <label id="act-label">Amount</label>
-      <input type="number" id="act-value" placeholder="0" min="1" inputmode="numeric">
-      <button class="log-btn" onclick="logActivity()">Log Activity ✓</button>
+      <div id="detection-display" class="detection-display hidden">
+        <div class="detection-label" id="detection-label">Steps detected</div>
+        <div class="detection-number" id="detection-number">0</div>
+        <div class="detection-unit" id="detection-unit"></div>
+        <div class="detection-timer" id="detection-timer"></div>
+      </div>
+      <button class="btn-control btn-start" id="btn-start" onclick="startDetection()">Start Detection 🚀</button>
+      <button class="btn-control btn-stop hidden" id="btn-stop" onclick="stopDetection()">Stop Detection ⏹</button>
       <p id="log-error" style="color:#993C1D; font-size:13px; margin-top:8px; display:none;"></p>
     </div>
   </div>
@@ -254,12 +281,25 @@ let bmrPerMin = 0;
 let weightKg = 0;
 let selectedActivity = null;
 let activityLog = [];
+let isDetecting = false;
+let detectionStartTime = 0;
+let stepCount = 0;
+let runDistance = 0;
+let runTime = 0;
+let jumpCount = 0;
+let lastAccelMagnitude = 0;
+let motionEventListener = null;
 
 const activityConfig = {
-  steps:   { label: 'Number of steps',   emoji: '👟', unit: 'steps',   name: 'Steps' },
-  running: { label: 'Minutes of running', emoji: '🏃', unit: 'minutes', name: 'Running' },
-  jumping: { label: 'Number of jumps',   emoji: '🤸', unit: 'jumps',   name: 'Jumping Jacks' }
+  steps:   { emoji: '👟', unit: 'steps',   name: 'Steps' },
+  running: { emoji: '🏃', unit: 'km',      name: 'Running' },
+  jumping: { emoji: '🤸', unit: 'jumps',   name: 'Jumping Jacks' }
 };
+
+// Motion detection thresholds
+const STEP_THRESHOLD = 25;
+const JUMP_THRESHOLD = 35;
+const RUNNING_THRESHOLD = 30;
 
 function setSex(sex) {
   userSex = sex;
@@ -278,7 +318,9 @@ function calsFromSteps(steps, bmr, w) {
   return (base + bmrF) / 2;
 }
 
-function calsFromRunning(mins, bmr, w) {
+function calsFromRunning(km, bmr, w) {
+  const mins = runTime / 1000 / 60;
+  const speedMps = (km * 1000) / (mins * 60);
   const act = 9.8 * w * (mins / 60);
   return (act + bmr * mins) / 2;
 }
@@ -309,6 +351,17 @@ function startTracking() {
   document.getElementById('greeting').textContent = `Hey, ${name}! 👋`;
   document.getElementById('page-setup').classList.add('hidden');
   document.getElementById('page-track').classList.remove('hidden');
+
+  // Request motion permission (iOS 13+)
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    DeviceMotionEvent.requestPermission().then(permission => {
+      if (permission !== 'granted') {
+        document.getElementById('permission-warning').classList.remove('hidden');
+      }
+    }).catch(() => {
+      document.getElementById('permission-warning').classList.remove('hidden');
+    });
+  }
 }
 
 function selectActivity(type) {
@@ -316,36 +369,186 @@ function selectActivity(type) {
   ['steps','running','jumping'].forEach(t => {
     document.getElementById('card-' + t).classList.toggle('selected', t === type);
   });
-  const cfg = activityConfig[type];
-  document.getElementById('act-label').textContent = cfg.label;
-  document.getElementById('act-value').placeholder = type === 'running' ? '30' : '1000';
-  document.getElementById('act-value').value = '';
-  document.getElementById('log-error').style.display = 'none';
+
+  resetDetection();
   document.getElementById('activity-input').classList.add('visible');
-  setTimeout(() => document.getElementById('act-value').focus(), 100);
+  document.getElementById('btn-start').classList.remove('hidden');
+  document.getElementById('btn-stop').classList.add('hidden');
+  document.getElementById('detection-display').classList.remove('hidden');
+
+  // Update display labels
+  const labels = {
+    steps: { label: 'Steps detected', unit: 'steps' },
+    running: { label: 'Running distance', unit: 'km' },
+    jumping: { label: 'Jumps detected', unit: 'jumps' }
+  };
+  document.getElementById('detection-label').textContent = labels[type].label;
+  document.getElementById('detection-unit').textContent = labels[type].unit;
 }
 
-function logActivity() {
-  const val = parseFloat(document.getElementById('act-value').value);
-  const errEl = document.getElementById('log-error');
+function resetDetection() {
+  stepCount = 0;
+  jumpCount = 0;
+  runDistance = 0;
+  runTime = 0;
+  lastAccelMagnitude = 0;
+  isDetecting = false;
+  detectionStartTime = 0;
+  updateDetectionDisplay();
+}
 
-  if (!val || val <= 0) {
-    errEl.textContent = 'Please enter a number greater than 0.';
-    errEl.style.display = 'block';
-    return;
+function startDetection() {
+  if (isDetecting) return;
+  
+  resetDetection();
+  isDetecting = true;
+  detectionStartTime = Date.now();
+
+  document.getElementById('btn-start').classList.add('hidden');
+  document.getElementById('btn-stop').classList.remove('hidden');
+  document.getElementById('detection-timer').style.display = 'block';
+
+  // Request permission and start listening
+  if (typeof DeviceMotionEvent !== 'undefined') {
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+      DeviceMotionEvent.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          motionEventListener = handleMotion;
+          window.addEventListener('devicemotion', motionEventListener);
+        }
+      }).catch(() => {
+        stopDetection();
+        document.getElementById('log-error').textContent = 'Motion sensors not available.';
+        document.getElementById('log-error').style.display = 'block';
+      });
+    } else {
+      motionEventListener = handleMotion;
+      window.addEventListener('devicemotion', motionEventListener);
+    }
+  } else {
+    stopDetection();
+    document.getElementById('log-error').textContent = 'Motion sensors not supported on this device.';
+    document.getElementById('log-error').style.display = 'block';
   }
-  errEl.style.display = 'none';
 
+  updateTimer();
+}
+
+function stopDetection() {
+  if (!isDetecting) return;
+  
+  isDetecting = false;
+  if (motionEventListener) {
+    window.removeEventListener('devicemotion', motionEventListener);
+    motionEventListener = null;
+  }
+
+  document.getElementById('btn-start').classList.remove('hidden');
+  document.getElementById('btn-stop').classList.add('hidden');
+  document.getElementById('detection-timer').style.display = 'none';
+
+  logDetectedActivity();
+}
+
+function handleMotion(event) {
+  if (!isDetecting) return;
+
+  const accel = event.acceleration;
+  if (!accel) return;
+
+  const magnitude = Math.sqrt(accel.x ** 2 + accel.y ** 2 + accel.z ** 2);
+  const delta = Math.abs(magnitude - lastAccelMagnitude);
+  lastAccelMagnitude = magnitude;
+
+  if (selectedActivity === 'steps' && delta > STEP_THRESHOLD) {
+    stepCount++;
+    updateDetectionDisplay();
+  } else if (selectedActivity === 'jumping' && delta > JUMP_THRESHOLD) {
+    jumpCount++;
+    updateDetectionDisplay();
+  } else if (selectedActivity === 'running' && delta > RUNNING_THRESHOLD) {
+    // Estimate distance: ~1.5 meters per running step, detected every step
+    runDistance += 0.0015;
+    runTime = Date.now() - detectionStartTime;
+    updateDetectionDisplay();
+  }
+}
+
+function updateDetectionDisplay() {
+  let displayValue = 0;
+  let displayUnit = '';
+
+  if (selectedActivity === 'steps') {
+    displayValue = stepCount;
+    displayUnit = 'steps';
+  } else if (selectedActivity === 'jumping') {
+    displayValue = jumpCount;
+    displayUnit = 'jumps';
+  } else if (selectedActivity === 'running') {
+    displayValue = runDistance.toFixed(2);
+    displayUnit = 'km';
+  }
+
+  document.getElementById('detection-number').textContent = displayValue;
+}
+
+function updateTimer() {
+  if (!isDetecting) return;
+  
+  const elapsed = Math.floor((Date.now() - detectionStartTime) / 1000);
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  document.getElementById('detection-timer').textContent = `⏱ ${mins}:${secs.toString().padStart(2, '0')}`;
+
+  setTimeout(updateTimer, 1000);
+}
+
+function logDetectedActivity() {
+  let count = 0;
   let cal = 0;
-  if (selectedActivity === 'steps')   cal = calsFromSteps(val, bmrPerMin, weightKg);
-  if (selectedActivity === 'running') cal = calsFromRunning(val, bmrPerMin, weightKg);
-  if (selectedActivity === 'jumping') cal = calsFromJumping(val, bmrPerMin, weightKg);
+
+  if (selectedActivity === 'steps') {
+    count = stepCount;
+    cal = calsFromSteps(count, bmrPerMin, weightKg);
+    if (count === 0) {
+      document.getElementById('log-error').textContent = 'No steps detected. Please try again.';
+      document.getElementById('log-error').style.display = 'block';
+      return;
+    }
+  } else if (selectedActivity === 'jumping') {
+    count = jumpCount;
+    cal = calsFromJumping(count, bmrPerMin, weightKg);
+    if (count === 0) {
+      document.getElementById('log-error').textContent = 'No jumps detected. Please try again.';
+      document.getElementById('log-error').style.display = 'block';
+      return;
+    }
+  } else if (selectedActivity === 'running') {
+    count = runDistance;
+    cal = calsFromRunning(count, bmrPerMin, weightKg);
+    if (count < 0.01) {
+      document.getElementById('log-error').textContent = 'Running distance too short. Please try again.';
+      document.getElementById('log-error').style.display = 'block';
+      return;
+    }
+  }
+
+  document.getElementById('log-error').style.display = 'none';
 
   const cfg = activityConfig[selectedActivity];
-  activityLog.push({ type: selectedActivity, val, cal, cfg });
+  const unit = selectedActivity === 'running' ? `${count.toFixed(2)} km in ${(runTime/1000/60).toFixed(1)} min` : `${count} ${cfg.unit}`;
+  
+  activityLog.push({
+    type: selectedActivity,
+    val: count,
+    cal: cal,
+    cfg: cfg,
+    unit: unit
+  });
 
-  document.getElementById('act-value').value = '';
+  resetDetection();
   renderLog();
+  selectActivity(selectedActivity); // Reset UI for next detection
 }
 
 function renderLog() {
@@ -370,7 +573,7 @@ function renderLog() {
         <div class="log-emoji">${e.cfg.emoji}</div>
         <div>
           <div class="log-name">${e.cfg.name}</div>
-          <div class="log-detail">${e.val} ${e.cfg.unit}</div>
+          <div class="log-detail">${e.unit}</div>
         </div>
       </div>
       <div class="log-cal">${e.cal.toFixed(1)} kcal</div>
