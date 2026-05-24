@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fitness Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green-50: #EAF3DE; --green-100: #C0DD97; --green-400: #639922;
+    --green-600: #3B6D11; --green-800: #27500A;
+    --teal-50: #E1F5EE; --teal-100: #9FE1CB; --teal-400: #1D9E75;
+    --teal-600: #0F6E56; --teal-800: #085041;
+    --gray-50: #F1EFE8; --gray-100: #D3D1C7; --gray-400: #888780;
+    --gray-600: #5F5E5A; --gray-800: #444441;
+    --amber-50: #FAEEDA; --amber-100: #FAC775; --amber-400: #BA7517;
+    --amber-600: #854F0B; --amber-800: #633806;
+    --coral-50: #FAECE7; --coral-100: #F5C4B3; --coral-400: #D85A30;
+    --coral-600: #993C1D; --coral-800: #712B13;
+    --bg: #f8f7f3;
+    --card: #ffffff;
+    --text: #1a1a18;
+    --muted: #5F5E5A;
+    --border: rgba(0,0,0,0.1);
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0 0 80px;
+  }
+
+  header {
+    background: var(--green-600);
+    color: white;
+    padding: 28px 20px 20px;
+    text-align: center;
+  }
+  header h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
+  header p { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+
+  .section { padding: 20px 16px 0; }
+  .section-title {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.8px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 12px;
+  }
+
+  .card {
+    background: var(--card); border-radius: var(--radius);
+    border: 0.5px solid var(--border); padding: 16px; margin-bottom: 12px;
+  }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+  input[type="text"], input[type="number"] {
+    width: 100%; padding: 11px 14px; font-size: 16px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text);
+    font-family: 'DM Sans', sans-serif; outline: none;
+    -webkit-appearance: none; appearance: none;
+  }
+  input:focus { border-color: var(--green-400); box-shadow: 0 0 0 3px rgba(99,153,34,0.12); }
+
+  .sex-toggle { display: flex; gap: 8px; }
+  .sex-btn {
+    flex: 1; padding: 11px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg);
+    font-size: 15px; font-weight: 500; cursor: pointer; color: var(--muted);
+    font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+  }
+  .sex-btn.active { background: var(--green-50); border-color: var(--green-400); color: var(--green-800); }
+
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .btn-primary {
+    width: 100%; padding: 14px; background: var(--green-600); color: white;
+    border: none; border-radius: var(--radius-sm); font-size: 16px; font-weight: 600;
+    font-family: 'DM Sans', sans-serif; cursor: pointer; margin-top: 4px;
+    transition: background 0.15s; -webkit-appearance: none;
+  }
+  .btn-primary:active { background: var(--green-800); }
+
+  .activity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .activity-card {
+    background: var(--card); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 16px 14px; cursor: pointer;
+    transition: all 0.15s; text-align: center;
+  }
+  .activity-card:active { transform: scale(0.97); }
+  .activity-card.selected { border-color: var(--teal-400); background: var(--teal-50); }
+  .act-icon { font-size: 28px; margin-bottom: 6px; }
+  .act-name { font-size: 14px; font-weight: 600; }
+  .act-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .input-section {
+    background: var(--card); border-radius: var(--radius); border: 0.5px solid var(--border);
+    padding: 16px; margin-top: 12px; display: none;
+  }
+  .input-section.visible { display: block; }
+
+  .log-btn {
+    width: 100%; padding: 13px; background: var(--teal-400); color: white;
+    border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600;
+    font-family: 'DM Sans', sans-serif; cursor: pointer; margin-top: 12px;
+    -webkit-appearance: none;
+  }
+  .log-btn:active { background: var(--teal-600); }
+
+  .log-list { display: flex; flex-direction: column; gap: 10px; }
+  .log-item {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--card); border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border); padding: 12px 14px;
+  }
+  .log-left { display: flex; align-items: center; gap: 10px; }
+  .log-emoji { font-size: 20px; }
+  .log-name { font-size: 14px; font-weight: 600; }
+  .log-detail { font-size: 12px; color: var(--muted); }
+  .log-cal { font-size: 15px; font-weight: 600; color: var(--teal-600); font-family: 'DM Mono', monospace; }
+
+  .total-card {
+    background: var(--green-600); color: white;
+    border-radius: var(--radius); padding: 20px; text-align: center; margin-top: 12px;
+  }
+  .total-label { font-size: 12px; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.6px; }
+  .total-number { font-size: 42px; font-weight: 600; font-family: 'DM Mono', monospace; margin: 4px 0 2px; }
+  .total-unit { font-size: 14px; opacity: 0.75; }
+  .total-note { font-size: 11px; opacity: 0.65; margin-top: 10px; line-height: 1.5; }
+
+  .empty-state { text-align: center; padding: 32px 16px; color: var(--muted); }
+  .empty-state .empty-icon { font-size: 36px; margin-bottom: 8px; }
+  .empty-state p { font-size: 14px; }
+
+  .hidden { display: none; }
+
+  #page-setup, #page-track { }
+
+  .nav-hint {
+    text-align: center; font-size: 13px; color: var(--muted);
+    padding: 16px; margin-top: -4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1: SETUP -->
+<div id="page-setup">
+  <header>
+    <h1>🏃 Fitness Tracker</h1>
+    <p>Let's set up your profile first</p>
+  </header>
+
+  <div class="section">
+    <p class="section-title">Your info</p>
+    <div class="card">
+      <div style="margin-bottom: 14px;">
+        <label for="inp-name">Name</label>
+        <input type="text" id="inp-name" placeholder="Your name" autocomplete="off">
+      </div>
+      <div class="form-row" style="margin-bottom: 14px;">
+        <div>
+          <label for="inp-age">Age</label>
+          <input type="number" id="inp-age" placeholder="25" min="1" inputmode="numeric">
+        </div>
+        <div>
+          <label>Biological sex</label>
+          <div class="sex-toggle">
+            <button class="sex-btn active" id="btn-male" onclick="setSex('M')">Male</button>
+            <button class="sex-btn" id="btn-female" onclick="setSex('F')">Female</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom: 4px;">
+        <div>
+          <label for="inp-weight">Weight (kg)</label>
+          <input type="number" id="inp-weight" placeholder="70" min="1" inputmode="decimal">
+        </div>
+        <div>
+          <label for="inp-height">Height (cm)</label>
+          <input type="number" id="inp-height" placeholder="170" min="1" inputmode="decimal">
+        </div>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="startTracking()">Start Tracking →</button>
+    <p id="setup-error" style="color:#993C1D; font-size:13px; text-align:center; margin-top:10px; display:none;"></p>
+  </div>
+</div>
+
+<!-- PAGE 2: TRACKER -->
+<div id="page-track" class="hidden">
+  <header>
+    <h1 id="greeting">Hey there! 👋</h1>
+    <p>Tap an activity to log it</p>
+  </header>
+
+  <div class="section">
+    <p class="section-title">Log activity</p>
+    <div class="activity-grid">
+      <div class="activity-card" id="card-steps" onclick="selectActivity('steps')">
+        <div class="act-icon">👟</div>
+        <div class="act-name">Steps</div>
+        <div class="act-sub">How many steps?</div>
+      </div>
+      <div class="activity-card" id="card-running" onclick="selectActivity('running')">
+        <div class="act-icon">🏃</div>
+        <div class="act-name">Running</div>
+        <div class="act-sub">How many minutes?</div>
+      </div>
+      <div class="activity-card" id="card-jumping" onclick="selectActivity('jumping')">
+        <div class="act-icon">🤸</div>
+        <div class="act-name">Jumping</div>
+        <div class="act-sub">How many jumps?</div>
+      </div>
+      <div class="activity-card" style="background: var(--gray-50); cursor:default; opacity:0.5;">
+        <div class="act-icon">➕</div>
+        <div class="act-name">More</div>
+        <div class="act-sub">Coming soon</div>
+      </div>
+    </div>
+
+    <div class="input-section" id="activity-input">
+      <label id="act-label">Amount</label>
+      <input type="number" id="act-value" placeholder="0" min="1" inputmode="numeric">
+      <button class="log-btn" onclick="logActivity()">Log Activity ✓</button>
+      <p id="log-error" style="color:#993C1D; font-size:13px; margin-top:8px; display:none;"></p>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top: 8px;">
+    <p class="section-title">Today's log</p>
+    <div id="log-empty" class="empty-state">
+      <div class="empty-icon">📋</div>
+      <p>No activities logged yet.<br>Tap one above to start!</p>
+    </div>
+    <div id="log-list" class="log-list hidden"></div>
+    <div id="total-card" class="total-card hidden">
+      <p class="total-label">Total calories burned</p>
+      <p class="total-number" id="total-num">0</p>
+      <p class="total-unit">kcal (estimated)</p>
+      <p class="total-note">All values are estimates based on the<br>Mifflin-St Jeor equation. Real results vary.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+let userSex = 'M';
+let bmrPerMin = 0;
+let weightKg = 0;
+let selectedActivity = null;
+let activityLog = [];
+
+const activityConfig = {
+  steps:   { label: 'Number of steps',   emoji: '👟', unit: 'steps',   name: 'Steps' },
+  running: { label: 'Minutes of running', emoji: '🏃', unit: 'minutes', name: 'Running' },
+  jumping: { label: 'Number of jumps',   emoji: '🤸', unit: 'jumps',   name: 'Jumping Jacks' }
+};
+
+function setSex(sex) {
+  userSex = sex;
+  document.getElementById('btn-male').classList.toggle('active', sex === 'M');
+  document.getElementById('btn-female').classList.toggle('active', sex === 'F');
+}
+
+function calcBMR(wKg, hCm, age, sex) {
+  const base = (10 * wKg) + (6.25 * hCm) - (5 * age);
+  return ((sex === 'M' ? base + 5 : base - 161) / 1440);
+}
+
+function calsFromSteps(steps, bmr, w) {
+  const base = steps * 0.04 * (w / 70);
+  const bmrF = bmr * (steps / 100) * 0.5;
+  return (base + bmrF) / 2;
+}
+
+function calsFromRunning(mins, bmr, w) {
+  const act = 9.8 * w * (mins / 60);
+  return (act + bmr * mins) / 2;
+}
+
+function calsFromJumping(jumps, bmr, w) {
+  const hrs = (jumps * 0.4) / 3600;
+  const act = 8.0 * w * hrs;
+  return (act + bmr * (jumps * 0.4 / 60)) / 2;
+}
+
+function startTracking() {
+  const name = document.getElementById('inp-name').value.trim() || 'You';
+  const age = parseFloat(document.getElementById('inp-age').value);
+  const weight = parseFloat(document.getElementById('inp-weight').value);
+  const height = parseFloat(document.getElementById('inp-height').value);
+  const errEl = document.getElementById('setup-error');
+
+  if (!age || age <= 0 || !weight || weight <= 0 || !height || height <= 0) {
+    errEl.textContent = 'Please fill in all fields with valid numbers.';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  weightKg = weight;
+  bmrPerMin = calcBMR(weight, height, age, userSex);
+
+  document.getElementById('greeting').textContent = `Hey, ${name}! 👋`;
+  document.getElementById('page-setup').classList.add('hidden');
+  document.getElementById('page-track').classList.remove('hidden');
+}
+
+function selectActivity(type) {
+  selectedActivity = type;
+  ['steps','running','jumping'].forEach(t => {
+    document.getElementById('card-' + t).classList.toggle('selected', t === type);
+  });
+  const cfg = activityConfig[type];
+  document.getElementById('act-label').textContent = cfg.label;
+  document.getElementById('act-value').placeholder = type === 'running' ? '30' : '1000';
+  document.getElementById('act-value').value = '';
+  document.getElementById('log-error').style.display = 'none';
+  document.getElementById('activity-input').classList.add('visible');
+  setTimeout(() => document.getElementById('act-value').focus(), 100);
+}
+
+function logActivity() {
+  const val = parseFloat(document.getElementById('act-value').value);
+  const errEl = document.getElementById('log-error');
+
+  if (!val || val <= 0) {
+    errEl.textContent = 'Please enter a number greater than 0.';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  let cal = 0;
+  if (selectedActivity === 'steps')   cal = calsFromSteps(val, bmrPerMin, weightKg);
+  if (selectedActivity === 'running') cal = calsFromRunning(val, bmrPerMin, weightKg);
+  if (selectedActivity === 'jumping') cal = calsFromJumping(val, bmrPerMin, weightKg);
+
+  const cfg = activityConfig[selectedActivity];
+  activityLog.push({ type: selectedActivity, val, cal, cfg });
+
+  document.getElementById('act-value').value = '';
+  renderLog();
+}
+
+function renderLog() {
+  const listEl = document.getElementById('log-list');
+  const emptyEl = document.getElementById('log-empty');
+  const totalCard = document.getElementById('total-card');
+
+  if (activityLog.length === 0) {
+    emptyEl.classList.remove('hidden');
+    listEl.classList.add('hidden');
+    totalCard.classList.add('hidden');
+    return;
+  }
+
+  emptyEl.classList.add('hidden');
+  listEl.classList.remove('hidden');
+  totalCard.classList.remove('hidden');
+
+  listEl.innerHTML = activityLog.map((e, i) => `
+    <div class="log-item">
+      <div class="log-left">
+        <div class="log-emoji">${e.cfg.emoji}</div>
+        <div>
+          <div class="log-name">${e.cfg.name}</div>
+          <div class="log-detail">${e.val} ${e.cfg.unit}</div>
+        </div>
+      </div>
+      <div class="log-cal">${e.cal.toFixed(1)} kcal</div>
+    </div>
+  `).join('');
+
+  const total = activityLog.reduce((s, e) => s + e.cal, 0);
+  document.getElementById('total-num').textContent = total.toFixed(1);
+}
+</script>
+</body>
+</html>
