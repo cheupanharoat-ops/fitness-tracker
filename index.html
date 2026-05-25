@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 <title>Fitness Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -166,9 +167,9 @@
   }
 
   .debug-info {
-    background: #f0f0f0; border-radius: var(--radius-sm); padding: 10px;
-    font-size: 11px; font-family: 'DM Mono', monospace; color: #333;
-    margin-top: 8px; max-height: 100px; overflow-y: auto;
+    background: #1a1a1a; border-radius: var(--radius-sm); padding: 10px;
+    font-size: 10px; font-family: 'DM Mono', monospace; color: #0f0;
+    margin-top: 8px; max-height: 120px; overflow-y: auto; border: 1px solid #333;
   }
 </style>
 </head>
@@ -297,6 +298,7 @@ let jumpCount = 0;
 let lastAccelMagnitude = 0;
 let motionEventListener = null;
 let debugLog = [];
+let motionEventCount = 0;
 
 const activityConfig = {
   steps:   { emoji: '👟', unit: 'steps',   name: 'Steps' },
@@ -305,9 +307,9 @@ const activityConfig = {
 };
 
 // Motion detection thresholds - CALIBRATED for real devices
-const STEP_THRESHOLD = 8;
-const JUMP_THRESHOLD = 12;
-const RUNNING_THRESHOLD = 10;
+const STEP_THRESHOLD = 5;
+const JUMP_THRESHOLD = 8;
+const RUNNING_THRESHOLD = 6;
 
 function setSex(sex) {
   userSex = sex;
@@ -404,12 +406,13 @@ function resetDetection() {
   lastAccelMagnitude = 0;
   isDetecting = false;
   detectionStartTime = 0;
+  motionEventCount = 0;
   updateDetectionDisplay();
 }
 
 function addDebugLog(msg) {
   debugLog.push(msg);
-  if (debugLog.length > 20) debugLog.shift();
+  if (debugLog.length > 25) debugLog.shift();
   document.getElementById('debug-display').innerHTML = debugLog.join('<br>');
   document.getElementById('debug-display').classList.remove('hidden');
 }
@@ -420,6 +423,7 @@ function startDetection() {
   resetDetection();
   isDetecting = true;
   detectionStartTime = Date.now();
+  motionEventCount = 0;
   debugLog = [];
 
   document.getElementById('btn-start').classList.add('hidden');
@@ -428,18 +432,17 @@ function startDetection() {
   document.getElementById('log-error').style.display = 'none';
 
   addDebugLog('🟢 Detection started...');
+  addDebugLog(`📱 Device: ${navigator.userAgent.substring(0, 50)}...`);
 
   // Request permission and start listening
   if (typeof DeviceMotionEvent !== 'undefined') {
     if (typeof DeviceMotionEvent.requestPermission === 'function') {
       // iOS 13+
-      addDebugLog('📱 iOS detected, requesting permission...');
+      addDebugLog('🍎 iOS detected, requesting permission...');
       DeviceMotionEvent.requestPermission().then(permission => {
         if (permission === 'granted') {
           addDebugLog('✅ Permission granted!');
-          motionEventListener = handleMotion;
-          window.addEventListener('devicemotion', motionEventListener);
-          addDebugLog('👂 Motion listener added');
+          attachMotionListener();
         } else {
           addDebugLog('❌ Permission denied by user');
           stopDetection();
@@ -455,11 +458,9 @@ function startDetection() {
         isDetecting = false;
       });
     } else {
-      // Non-iOS devices
-      addDebugLog('🖥️ Non-iOS device, adding listener directly...');
-      motionEventListener = handleMotion;
-      window.addEventListener('devicemotion', motionEventListener);
-      addDebugLog('👂 Motion listener added');
+      // Android and non-iOS devices
+      addDebugLog('🤖 Non-iOS device (likely Android)');
+      attachMotionListener();
     }
   } else {
     addDebugLog('❌ DeviceMotionEvent not supported');
@@ -472,6 +473,13 @@ function startDetection() {
   updateTimer();
 }
 
+function attachMotionListener() {
+  motionEventListener = handleMotion;
+  window.addEventListener('devicemotion', motionEventListener);
+  addDebugLog('👂 Motion listener attached');
+  addDebugLog('⏳ Waiting for motion events...');
+}
+
 function stopDetection() {
   if (!isDetecting) return;
   
@@ -479,7 +487,7 @@ function stopDetection() {
   if (motionEventListener) {
     window.removeEventListener('devicemotion', motionEventListener);
     motionEventListener = null;
-    addDebugLog('👂 Motion listener removed');
+    addDebugLog(`👂 Motion listener removed (${motionEventCount} events)`);
   }
 
   document.getElementById('btn-start').classList.remove('hidden');
@@ -492,26 +500,48 @@ function stopDetection() {
 function handleMotion(event) {
   if (!isDetecting) return;
 
-  const accel = event.acceleration;
-  if (!accel) return;
+  motionEventCount++;
 
-  const magnitude = Math.sqrt(accel.x ** 2 + accel.y ** 2 + accel.z ** 2);
+  // Try to get acceleration without gravity first (more accurate)
+  let accel = event.acceleration;
+  
+  // Fall back to accelerationIncludingGravity if acceleration is null/unavailable
+  if (!accel || (accel.x === null && accel.y === null && accel.z === null)) {
+    accel = event.accelerationIncludingGravity;
+    if (motionEventCount === 1) {
+      addDebugLog('📊 Using accelerationIncludingGravity (Android)');
+    }
+  }
+  
+  if (!accel) {
+    if (motionEventCount === 1) {
+      addDebugLog('❌ No acceleration data available');
+    }
+    return;
+  }
+
+  const magnitude = Math.sqrt((accel.x || 0) ** 2 + (accel.y || 0) ** 2 + (accel.z || 0) ** 2);
   const delta = Math.abs(magnitude - lastAccelMagnitude);
   lastAccelMagnitude = magnitude;
+
+  // Show first few raw values for debugging
+  if (motionEventCount <= 3) {
+    addDebugLog(`📈 Raw: mag=${magnitude.toFixed(1)}, delta=${delta.toFixed(1)}`);
+  }
 
   if (selectedActivity === 'steps' && delta > STEP_THRESHOLD) {
     stepCount++;
     updateDetectionDisplay();
-    addDebugLog(`👟 Step #${stepCount} (delta: ${delta.toFixed(1)})`);
+    addDebugLog(`👟 Step #${stepCount} (Δ${delta.toFixed(1)})`);
   } else if (selectedActivity === 'jumping' && delta > JUMP_THRESHOLD) {
     jumpCount++;
     updateDetectionDisplay();
-    addDebugLog(`🤸 Jump #${jumpCount} (delta: ${delta.toFixed(1)})`);
+    addDebugLog(`🤸 Jump #${jumpCount} (Δ${delta.toFixed(1)})`);
   } else if (selectedActivity === 'running' && delta > RUNNING_THRESHOLD) {
     runDistance += 0.0015;
     runTime = Date.now() - detectionStartTime;
     updateDetectionDisplay();
-    addDebugLog(`🏃 Run +0.0015km (delta: ${delta.toFixed(1)})`);
+    addDebugLog(`🏃 Run +0.0015km (Δ${delta.toFixed(1)})`);
   }
 }
 
